@@ -1,0 +1,56 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../store/authStore';
+import { validateEmail, validateName, validatePassword, validatePhone, required, validateNumber, firstError, clean } from '../utils/validation';
+import { notify } from '../components/UX';
+
+const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+export function Login(){const {login,googleLogin}=useAuth();const nav=useNavigate();const [form,setForm]=useState({email:'',password:''});const [error,setError]=useState('');const [submitting,setSubmitting]=useState(false);function goTo(u){nav(u.role==='admin'?'/admin':u.role==='farmer'?'/farmer':'/dashboard')}async function submit(e){e.preventDefault();setError('');const email=form.email.trim();const validation=firstError(validateEmail(email),required(form.password,'Password'));if(validation){setError(validation);notify(validation,'error');return}setSubmitting(true);try{const user=await login(email,form.password);notify('Signed in successfully.','success');goTo(user)}catch(err){const msg=err.response?.data?.message||'Login failed';setError(msg);notify(msg,'error')}finally{setSubmitting(false)}}const onGoogle=useCallback(async(credential)=>{setError('');try{goTo(await googleLogin(credential))}catch(err){const msg=err.response?.data?.message||'Google sign-in failed';setError(msg);notify(msg,'error')}},[]);return <AuthBox title="Welcome back" subtitle="Sign in to manage your MarketLink account and marketplace activity." error={error}><form onSubmit={submit} noValidate><Field label="Email" type="email" value={form.email} autoComplete="email" onChange={v=>setForm({...form,email:v})}/><PasswordField label="Password" value={form.password} autoComplete="current-password" onChange={v=>setForm({...form,password:v})}/><button className="button full" disabled={submitting}>{submitting?'Signing in…':'Sign in'}</button></form><Divider/><GoogleButton onCredential={onGoogle}/><p className="center">New to MarketLink? <Link to="/register" className="text-link">Create an account</Link></p></AuthBox>}
+export function Register(){const {register,googleLogin}=useAuth();const nav=useNavigate();const [role,setRole]=useState('customer');const [form,setForm]=useState({name:'',email:'',password:'',phone:'',address:'',stallName:'',contactPerson:'',businessAddress:'',pickupWindowStart:'09:00',pickupWindowEnd:'15:00',cutoffMinutes:120,latitude:'',longitude:'',operatingDays:[]});const [error,setError]=useState('');const [submitting,setSubmitting]=useState(false);function toggleDay(day){setForm(f=>({...f,operatingDays:f.operatingDays.includes(day)?f.operatingDays.filter(x=>x!==day):[...f.operatingDays,day]}))}function goTo(u){nav(u.role==='farmer'?'/farmer':'/dashboard')}async function submit(e){e.preventDefault();setError('');const name=form.name.trim(),email=form.email.trim();const validation=firstError(validateName(name,'Full name'),validateEmail(email),validatePassword(form.password),validatePhone(form.phone,{required:true}),required(form.address,'Address'));if(validation){setError(validation);notify(validation,'error');return}if(role==='farmer'){const farmerValidation=firstError(validateName(form.stallName,'Stall / business name'),validateName(form.contactPerson,'Contact person'),required(form.businessAddress||form.address,'Business address'),validateNumber(form.cutoffMinutes,'Cutoff minutes',{min:0,max:1440}),validateNumber(form.latitude,'Latitude',{min:-90,max:90,required:false}),validateNumber(form.longitude,'Longitude',{min:-180,max:180,required:false}));if(farmerValidation){setError(farmerValidation);notify(farmerValidation,'error');return}if(form.pickupWindowStart&&form.pickupWindowEnd&&form.pickupWindowStart>=form.pickupWindowEnd){const msg='Pickup end time must be later than pickup start time.';setError(msg);notify(msg,'error');return}if(!form.operatingDays.length){const msg='Select at least one operating day.';setError(msg);notify(msg,'error');return}}setSubmitting(true);try{const payload={name,email,password:form.password,phone:form.phone.trim(),address:form.address.trim(),role};if(role==='farmer')payload.farmerProfile={stallName:form.stallName,contactPerson:form.contactPerson,businessAddress:form.businessAddress||form.address,pickupWindowStart:form.pickupWindowStart,pickupWindowEnd:form.pickupWindowEnd,cutoffMinutes:Number(form.cutoffMinutes),latitude:form.latitude===''?undefined:Number(form.latitude),longitude:form.longitude===''?undefined:Number(form.longitude),operatingDays:form.operatingDays};const user=await register(payload);notify(role==='farmer'?'Registration submitted. Your farmer account is pending approval.':'Account created successfully.','success');goTo(user)}catch(err){const msg=err.response?.data?.message||'Registration failed';setError(msg);notify(msg,'error')}finally{setSubmitting(false)}}const onGoogle=useCallback(async(credential)=>{setError('');try{goTo(await googleLogin(credential,role))}catch(err){const msg=err.response?.data?.message||'Google sign-up failed';setError(msg);notify(msg,'error')}},[role]);return <AuthBox title="Join MarketLink" subtitle="Create a customer or farmer account." error={error}><div className="role-toggle"><button type="button" className={role==='customer'?'active':''} onClick={()=>setRole('customer')}>Customer</button><button type="button" className={role==='farmer'?'active':''} onClick={()=>setRole('farmer')}>Farmer</button></div><GoogleButton onCredential={onGoogle}/><Divider label="or sign up with email"/><form onSubmit={submit} noValidate><Field label="Full name" value={form.name} onChange={v=>setForm({...form,name:v})}/><Field label="Email" type="email" value={form.email} onChange={v=>setForm({...form,email:v})}/><PasswordField label="Password" value={form.password} autoComplete="new-password" onChange={v=>setForm({...form,password:v})}/><Field label="Phone" value={form.phone} onChange={v=>setForm({...form,phone:v})}/><Field label="Address" value={form.address} onChange={v=>setForm({...form,address:v})}/>{role==='farmer'&&<div className="panel inset"><h3>Farmer setup</h3><div className="form-grid"><Field label="Stall / business name" value={form.stallName} onChange={v=>setForm({...form,stallName:v})}/><Field label="Contact person" value={form.contactPerson} onChange={v=>setForm({...form,contactPerson:v})}/><Field label="Business address" value={form.businessAddress} onChange={v=>setForm({...form,businessAddress:v})}/><Field label="Cutoff minutes" type="number" value={form.cutoffMinutes} onChange={v=>setForm({...form,cutoffMinutes:v})}/><Field label="Pickup starts" type="time" value={form.pickupWindowStart} onChange={v=>setForm({...form,pickupWindowStart:v})}/><Field label="Pickup ends" type="time" value={form.pickupWindowEnd} onChange={v=>setForm({...form,pickupWindowEnd:v})}/><Field label="Latitude" type="number" value={form.latitude} onChange={v=>setForm({...form,latitude:v})}/><Field label="Longitude" type="number" value={form.longitude} onChange={v=>setForm({...form,longitude:v})}/></div><div className="chip-list">{DAYS.map(d=><button type="button" key={d} className={`chip ${form.operatingDays.includes(d)?'active':''}`} onClick={()=>toggleDay(d)}>{d}</button>)}</div><p className="hint">A farmer account starts as pending and needs admin approval before products can be listed.</p></div>}<button className="button full" disabled={submitting}>{submitting?'Creating account…':'Create account'}</button></form></AuthBox>}
+function AuthBox({title,subtitle,children}){return <section className="auth-page"><div className="auth-visual" aria-hidden="true"><div className="auth-orbit auth-orbit-a"/><div className="auth-orbit auth-orbit-b"/><div className="auth-visual-copy"><span>LOCAL COMMERCE · REIMAGINED</span><strong>From trusted growers to everyday tables.</strong><small>One marketplace for products, pickup, farmers and local markets.</small></div></div><div className="auth-card"><div className="eyebrow">MARKETLINK ACCOUNT</div><h1>{title}</h1><p>{subtitle}</p>{children}</div></section>};function Field({label,type='text',value,onChange,autoComplete}){const optional=label==='Latitude'||label==='Longitude';return <label className="field"><span>{label}{optional&&<small> optional</small>}</span><input required={!optional} type={type} value={value} autoComplete={autoComplete} min={type==='number'&&label==='Cutoff minutes'?0:undefined} step={type==='number'&&['Latitude','Longitude'].includes(label)?'any':undefined} onChange={e=>onChange(e.target.value)}/></label>}
+function PasswordField({label='Password',value,onChange,autoComplete}){const [visible,setVisible]=useState(false);return <label className="field password-field"><span>{label}</span><span className="password-input-wrap"><input required type={visible?'text':'password'} value={value} autoComplete={autoComplete} onChange={e=>onChange(e.target.value)}/><button type="button" className="password-toggle" onClick={()=>setVisible(v=>!v)} aria-label={visible?'Hide password':'Show password'} title={visible?'Hide password':'Show password'}>{visible?<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.7"/></svg>:<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.9 10.9 0 0 1 12 5c6 0 9.5 7 9.5 7a17.8 17.8 0 0 1-3.1 3.8M6.1 6.1C3.8 7.7 2.5 12 2.5 12S6 19 12 19a9.9 9.9 0 0 0 4.1-.9"/></svg>}</button></span></label>}
+function Divider({label='or continue with'}){return <div className="auth-divider"><span/><small>{label}</small><span/></div>}
+
+// Renders the "Sign in with Google" button using Google Identity Services
+// (script tag loaded in index.html). Waits for window.google to be ready
+// since the script loads async/defer.
+function GoogleButton({onCredential}){
+  const ref=useRef(null);
+  const [ready,setReady]=useState(false);
+
+  useEffect(()=>{
+    let cancelled=false,interval;
+    function render(){
+      if(cancelled||!ref.current||!window.google)return;
+      const clientId=import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      if(!clientId||clientId==='your_google_client_id'){
+        ref.current.innerHTML='<p class="hint">Google sign-in not configured (missing VITE_GOOGLE_CLIENT_ID)</p>';
+        return;
+      }
+      window.google.accounts.id.initialize({
+        client_id:clientId,
+        callback:(res)=>onCredential(res.credential),
+        auto_select:false,
+        cancel_on_tap_outside:true,
+        use_fedcm_for_prompt:true
+      });
+      ref.current.innerHTML='';
+      window.google.accounts.id.renderButton(ref.current,{
+        theme:'outline',
+        size:'large',
+        width:320,
+        text:'signin_with',
+        shape:'rectangular'
+      });
+      setReady(true);
+    }
+    if(window.google)render();
+    else interval=setInterval(()=>{if(window.google){render();clearInterval(interval)}},200);
+    return ()=>{cancelled=true;if(interval)clearInterval(interval)};
+  },[onCredential]);
+
+  return <div className="google-auth-area">
+    {!ready && <p className="hint">Loading Google sign-in...</p>}
+    <div className="google-real-button" ref={ref}></div>
+  </div>;
+}
